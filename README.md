@@ -1,59 +1,113 @@
-# 🎯 AI Resume Analyzer
+# AI Career Coaching Resume Analyzer
 
-An AI-powered web app that analyzes resumes, matches them with job descriptions, and provides actionable insights to improve career readiness.
+An end-to-end, rule-based resume analysis app built with Python and Streamlit. It helps students and early-career professionals evaluate resume quality, predict best-fit roles, compare resumes, and identify skill gaps against a target job description.
 
----
+## Why This Project
 
-## 🚀 Features
+- Beginner-friendly architecture with clean, modular utilities
+- Fast local execution (no model training required)
+- Practical outputs: role prediction, weighted score, missing skills, roadmap, and downloadable PDF report
 
-- 📄 Resume Upload (PDF)
-- 🧠 Skill Extraction & Scoring (0–10)
-- 🎯 Job Description Matching
-- ⚠️ Missing Skills Detection
-- 📊 Match Percentage with Visual Indicators
-- 🧾 Professional PDF Report Generation
-- 🎨 Clean & Modern UI (Streamlit)
+## Key Features
 
----
+- PDF resume text extraction and normalization
+- Config-driven skill extraction (single and multi-word skills)
+- Role prediction with confidence percentages
+- Job-match scoring with weighted skill importance
+- Resume scoring with transparent component breakdown
+- Skill-gap roadmap generation
+- Professional PDF report export
+- Side-by-side comparison of two resumes
 
-## 🛠 Tech Stack
+## Tech Stack
 
-- Python
+- Python 3.10+
 - Streamlit
 - PyPDF2
 - ReportLab
 
----
+## Screenshots
 
-## 💡 How it Works
+### Home
 
-1. Upload your resume
-2. Paste a job description
-3. Get:
-   - Resume score
-   - Skills detected
-   - Missing skills
-   - Suggestions
-   - Match percentage
+![Home Screen](assets/images/home.png)
 
----
+### Upload and Analyze
 
-## 📸 Screenshots
+![Upload Flow](assets/images/draganddrop.png)
 
-## 📸 Screenshots
+### Results
 
-### 🏠 Home Page
-![Home](home.png)
+![Analysis Result](assets/images/result.png)
 
-### 📤 Upload Section
-![Upload](draganddrop.png)
+## Project Structure
 
-### 📊 Result Page
-![Result](result.png)
----
+```text
+ai-career-coaching/
+├── app.py
+├── assets/
+│   └── images/
+│       ├── draganddrop.png
+│       ├── home.png
+│       └── result.png
+├── config.py
+├── requirements.txt
+├── data/
+│   ├── roles.json
+│   └── skills.json
+└── utils/
+    ├── __init__.py
+    ├── matcher.py
+    ├── parser.py
+    ├── report.py
+    ├── role_predictor.py
+    ├── scorer.py
+    ├── skill_extractor.py
+    └── text_cleaner.py
+```
 
-## ▶️ Run Locally
+## Local Setup
+
+### 1. Create and activate a virtual environment
+
+```bash
+python -m venv .venv
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+```
+
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
+```
+
+### 3. Run the app
+
+```bash
 streamlit run app.py
+```
+
+## Scoring Formula
+
+```text
+score = (
+  0.4 * skill_score +
+  0.2 * project_score +
+  0.2 * experience_score +
+  0.1 * resume_quality_score +
+  0.1 * keyword_density_score
+)
+```
+
+## Design Notes
+
+- The solution is intentionally rule-based and interpretable.
+- All skill and role mappings are editable in JSON files.
+- Repeated operations are cached in Streamlit for responsiveness.
+
+## Future Improvements
+
+- Add automated tests for core scoring and matching utilities
+- Add optional NLP embeddings for semantic skill matching
+- Add Docker setup for one-command deployment

@@ -1,575 +1,282 @@
+"""Streamlit entry point for the AI Resume Analyzer project."""
+
+import io
+
 import streamlit as st
-from utils import analyze_resume, extract_text_from_pdf, generate_pdf_report, match_job_description
 
-st.set_page_config(page_title="AI Career Coach", layout="centered")
+from config import APP_TITLE
+from utils.matcher import build_skill_gap_roadmap, match_resume_to_job
+from utils.parser import extract_text_from_pdf
+from utils.report import generate_pdf
+from utils.role_predictor import get_role_confidence, predict_role
+from utils.scorer import calculate_resume_score
+from utils.skill_extractor import extract_skills
 
-top_col1, top_col2 = st.columns(2)
-with top_col1:
-    view_mode = st.radio(
-        "View Mode",
-        ["Standard view", "Compact view"],
-        horizontal=True,
-    )
-with top_col2:
-    theme_mode = st.radio(
-        "Theme",
-        ["Modern", "Classic"],
-        horizontal=True,
-    )
+st.set_page_config(page_title=APP_TITLE, layout="wide")
 
-st.markdown(
-    """
-    <style>
-    :root {
-        --bg-soft: #f3f6fb;
-        --bg-card: #ffffff;
-        --ink: #0f172a;
-        --ink-soft: #334155;
-        --line: #dbe3ef;
-        --brand-1: #0f4c81;
-        --brand-2: #0ea5a4;
-        --good-1: #166534;
-        --good-2: #22c55e;
-        --warn-1: #b45309;
-        --warn-2: #f59e0b;
-        --bad-1: #b91c1c;
-        --bad-2: #ef4444;
-    }
 
-    .main {
-        padding-top: 1rem;
-        background: radial-gradient(circle at 20% 0%, #eef4ff 0%, #f9fbff 45%, #ffffff 100%);
-        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
-    }
+def apply_theme(theme_name: str) -> None:
+    """Apply a basic light/dark theme using custom CSS."""
+    if theme_name == "Dark":
+        st.markdown(
+            """
+            <style>
+            .stApp {background: #0f172a; color: #e2e8f0;}
+            section[data-testid="stSidebar"] {background: #111827;}
+            div[data-testid="stMetric"] {background: #1f2937; padding: 8px; border-radius: 10px;}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            """
+            <style>
+            .stApp {background: #f8fafc; color: #0f172a;}
+            section[data-testid="stSidebar"] {background: #e2e8f0;}
+            div[data-testid="stMetric"] {background: #ffffff; padding: 8px; border-radius: 10px;}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    .block-container {
-        max-width: 980px;
-        padding-top: 1.1rem;
-        padding-bottom: 2.2rem;
-    }
 
-    @keyframes fadeInUp {
-        from {
-            opacity: 0;
-            transform: translateY(8px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
+@st.cache_data(show_spinner=False)
+def analyze_resume_file(file_bytes: bytes, job_description: str) -> dict:
+    """Run the full analysis pipeline for one resume file."""
+    resume_text = extract_text_from_pdf(io.BytesIO(file_bytes))
+    if not resume_text:
+        return {"error": "No extractable text found in this PDF. Please upload a clearer resume."}
 
-    .hero-card,
-    .panel-card,
-    .section-card,
-    .score-box,
-    .match-box,
-    .missing-card {
-        animation: fadeInUp 340ms ease-out;
-    }
+    skills = extract_skills(resume_text)
+    role_confidence = get_role_confidence(skills)
+    predicted_role = predict_role(skills)
 
-    @media (prefers-reduced-motion: reduce) {
-        .hero-card,
-        .panel-card,
-        .section-card,
-        .score-box,
-        .match-box,
-        .missing-card {
-            animation: none;
-        }
-    }
-
-    hr {
-        border: none;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, #dbe3ef, transparent);
-        margin: 1rem 0 1.1rem 0;
-    }
-
-    .hero-card {
-        background: linear-gradient(120deg, var(--brand-1), var(--brand-2));
-        color: #ffffff;
-        border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.25);
-        padding: 18px 20px;
-        margin-bottom: 16px;
-        box-shadow: 0 10px 24px rgba(15, 76, 129, 0.16);
-    }
-
-    .hero-title {
-        margin: 0;
-        font-size: 1.55rem;
-        font-weight: 700;
-        line-height: 1.2;
-    }
-
-    .hero-subtitle {
-        margin-top: 6px;
-        opacity: 0.95;
-        font-size: 0.95rem;
-    }
-
-    .hero-tag {
-        display: inline-block;
-        margin-bottom: 8px;
-        padding: 4px 10px;
-        border-radius: 999px;
-        font-size: 0.75rem;
-        font-weight: 700;
-        letter-spacing: 0.02em;
-        background: rgba(255, 255, 255, 0.2);
-        border: 1px solid rgba(255, 255, 255, 0.35);
-    }
-
-    .panel-card {
-        background: var(--bg-card);
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 14px 16px;
-        margin-top: 8px;
-        margin-bottom: 12px;
-        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
-    }
-
-    .report-title {
-        color: var(--ink);
-        font-size: 1.4rem;
-        font-weight: 700;
-        margin: 0 0 10px 0;
-    }
-
-    .section-title {
-        color: var(--ink);
-        font-size: 1.05rem;
-        font-weight: 700;
-        margin: 2px 0 6px 0;
-    }
-
-    .section-heading {
-        color: var(--ink);
-        margin-bottom: 6px;
-    }
-
-    .divider-space {
-        margin-top: 10px;
-        margin-bottom: 10px;
-    }
-
-    .section-card {
-        background: var(--bg-soft);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 14px 16px 12px 16px;
-        margin-top: 8px;
-        margin-bottom: 12px;
-    }
-
-    .section-card ul,
-    .missing-card ul {
-        margin-top: 0;
-        margin-bottom: 0;
-        padding-left: 18px;
-        color: var(--ink-soft);
-        line-height: 1.5;
-    }
-
-    .score-box {
-        background: linear-gradient(135deg, #0f766e, #0ea5a4);
-        color: white;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.28);
-        padding: 18px 16px;
-        text-align: center;
-        margin-top: 8px;
-        box-shadow: 0 8px 20px rgba(15, 118, 110, 0.2);
-    }
-
-    .score-label {
-        font-size: 0.9rem;
-        opacity: 0.9;
-        margin-bottom: 4px;
-    }
-
-    .score-value {
-        font-size: 2rem;
-        font-weight: 700;
-        line-height: 1.1;
-    }
-
-    .role-badge {
-        display: inline-block;
-        background: #eaf6ff;
-        color: #0f4c81;
-        border: 1px solid #bfdbfe;
-        border-radius: 999px;
-        padding: 7px 12px;
-        font-weight: 600;
-        margin-top: 8px;
-    }
-
-    .match-box {
-        color: white;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.28);
-        padding: 16px;
-        text-align: center;
-        margin-top: 8px;
-        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15);
-    }
-
-    .match-low {
-        background: linear-gradient(135deg, var(--bad-1), var(--bad-2));
-    }
-
-    .match-medium {
-        background: linear-gradient(135deg, var(--warn-1), var(--warn-2));
-    }
-
-    .match-high {
-        background: linear-gradient(135deg, var(--good-1), var(--good-2));
-    }
-
-    .missing-card {
-        background: #fff1f2;
-        border: 1px solid #fecdd3;
-        border-radius: 12px;
-        padding: 14px 16px;
-        margin-top: 8px;
-        margin-bottom: 8px;
-    }
-
-    div[data-testid="stFileUploader"],
-    div[data-testid="stTextArea"] {
-        background: #f8fbff;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 8px 10px;
-    }
-
-    div[data-testid="stExpander"] {
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: #ffffff;
-    }
-
-    .section-gap {
-        margin-top: 2px;
-        margin-bottom: 2px;
-    }
-
-    .stButton > button {
-        width: 100%;
-        border: none;
-        border-radius: 10px;
-        background: linear-gradient(120deg, var(--brand-1), var(--brand-2));
-        color: #ffffff;
-        font-weight: 700;
-        padding: 0.58rem 0.8rem;
-        box-shadow: 0 7px 16px rgba(15, 76, 129, 0.2);
-    }
-
-    .stDownloadButton > button {
-        border-radius: 10px;
-        border: 1px solid var(--line);
-        background: #ffffff;
-        color: var(--ink);
-        font-weight: 600;
-    }
-
-    @media (max-width: 768px) {
-        .hero-title {
-            font-size: 1.3rem;
-        }
-        .score-value {
-            font-size: 1.6rem;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-if theme_mode == "Classic":
-    st.markdown(
-        """
-        <style>
-        :root {
-            --bg-soft: #f6f7f9;
-            --bg-card: #ffffff;
-            --brand-1: #1f2937;
-            --brand-2: #4b5563;
-        }
-        .main {
-            background: radial-gradient(circle at 20% 0%, #f4f6f8 0%, #fbfcfd 45%, #ffffff 100%);
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-else:
-    st.markdown(
-        """
-        <style>
-        :root {
-            --bg-soft: #f3f6fb;
-            --bg-card: #ffffff;
-            --brand-1: #0f4c81;
-            --brand-2: #0ea5a4;
-        }
-        .main {
-            background: radial-gradient(circle at 20% 0%, #eef4ff 0%, #f9fbff 45%, #ffffff 100%);
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
+    job_match = match_resume_to_job(resume_text, job_description)
+    score_data = calculate_resume_score(
+        resume_text,
+        skills,
+        job_match=job_match if job_description.strip() else None,
     )
 
-if view_mode == "Compact view":
-    st.markdown(
-        """
-        <style>
-        .block-container {
-            max-width: 940px;
-            padding-top: 0.8rem;
-            padding-bottom: 1.4rem;
-        }
-        .hero-card {
-            padding: 14px 16px;
-            margin-bottom: 10px;
-        }
-        .hero-title {
-            font-size: 1.35rem;
-        }
-        .hero-subtitle {
-            font-size: 0.88rem;
-            margin-top: 4px;
-        }
-        .panel-card,
-        .section-card,
-        .missing-card {
-            padding: 10px 12px;
-            margin-top: 6px;
-            margin-bottom: 8px;
-        }
-        .score-box,
-        .match-box {
-            padding: 12px;
-            margin-top: 6px;
-        }
-        .section-title {
-            font-size: 0.98rem;
-            margin: 0 0 4px 0;
-        }
-        .report-title {
-            font-size: 1.2rem;
-            margin: 0 0 8px 0;
-        }
-        .score-value {
-            font-size: 1.6rem;
-        }
-        .score-label {
-            font-size: 0.82rem;
-        }
-        .stButton > button,
-        .stDownloadButton > button {
-            padding-top: 0.44rem;
-            padding-bottom: 0.44rem;
-            font-size: 0.92rem;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    roadmap = build_skill_gap_roadmap(job_match.get("missing_skills", [])) if job_description.strip() else []
 
-st.markdown(
-    """
-    <div class="hero-card">
-        <div class="hero-tag">CAREER TOOLS</div>
-        <h1 class="hero-title">Resume Intelligence Studio</h1>
-        <div class="hero-subtitle">Upload your resume, compare it with a job description, and get clear career guidance.</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+    key_insight = "Your profile shows strong fundamentals and is ready for targeted improvements."
+    if job_description.strip() and job_match.get("missing_skills"):
+        top_missing = ", ".join(skill.title() for skill in job_match["missing_skills"][:3])
+        key_insight = (
+            "Your profile shows strong programming fundamentals but lacks core skills for this role: "
+            f"{top_missing}."
+        )
 
-st.markdown("---")
+    report_payload = {
+        "role": predicted_role,
+        "score": score_data["score"],
+        "match_percentage": job_match["match_percentage"],
+        "match_level": job_match.get("match_level", "Low Match"),
+        "role_confidence": role_confidence,
+        "skills": skills,
+        "missing_skills": job_match["missing_skills"],
+        "suggestions": score_data["suggestions"],
+        "breakdown": score_data["breakdown"],
+        "key_insight": key_insight,
+    }
 
-st.markdown('<div class="panel-card">', unsafe_allow_html=True)
-uploaded_file = st.file_uploader("📂 Upload Resume (PDF)", type=["pdf"])
-job_text = st.text_area("📝 Paste Job Description", placeholder="Paste the role requirements here to compare your skills...")
-st.markdown('</div>', unsafe_allow_html=True)
+    return {
+        "resume_text": resume_text,
+        "skills": skills,
+        "role": predicted_role,
+        "role_confidence": role_confidence,
+        "job_match": job_match,
+        "score": score_data,
+        "roadmap": roadmap,
+        "key_insight": key_insight,
+        "pdf_bytes": generate_pdf(report_payload),
+    }
 
-if uploaded_file is not None:
-    st.success("✅ Resume uploaded successfully!")
 
-    text = extract_text_from_pdf(uploaded_file)
+@st.cache_data(show_spinner=False)
+def quick_resume_summary(file_bytes: bytes) -> dict:
+    """Generate a quick score/role summary used by resume comparison."""
+    resume_text = extract_text_from_pdf(io.BytesIO(file_bytes))
+    if not resume_text:
+        return {"error": "No extractable text found."}
 
-    with st.expander("📄 View Extracted Resume"):
-        st.write(text[:1000])
+    skills = extract_skills(resume_text)
+    role = predict_role(skills)
+    score_data = calculate_resume_score(resume_text, skills)
 
-    st.markdown("---")
+    return {
+        "role": role,
+        "score": score_data["score"],
+        "skills": skills,
+    }
 
-    if st.button("🚀 Analyze Resume"):
-        with st.spinner("Analyzing your resume..."):
-            result = analyze_resume(text)
-            jd_result = match_job_description(text, job_text)
 
-        st.markdown('<div class="panel-card">', unsafe_allow_html=True)
-        st.markdown('<h2 class="report-title">📊 Analysis Report</h2>', unsafe_allow_html=True)
-        st.markdown(" ")
+def render_breakdown(breakdown: dict) -> None:
+    """Render each weighted score component as a progress bar."""
+    labels = {
+        "skill_score": "Skill Score",
+        "project_score": "Project Score",
+        "experience_score": "Experience Score",
+        "resume_quality_score": "Resume Quality Score",
+        "keyword_density_score": "Keyword Density Score",
+    }
 
-        col1, col2 = st.columns(2)
+    for key, label in labels.items():
+        value = breakdown.get(key, 0)
+        st.write(f"{label}: {value}%")
+        st.progress(min(max(value / 100, 0.0), 1.0))
 
-        with col1:
-            st.markdown('<h3 class="section-title">🧠 Skills</h3>', unsafe_allow_html=True)
-            skills = result.get("skills", [])
-            if skills:
-                skill_lines = "".join([f"<li>✅ {skill.title()}</li>" for skill in skills])
-                st.markdown(
-                    f"""
-                    <div class="section-card">
-                        <ul>{skill_lines}</ul>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown('<div class="section-card">No skills detected.</div>', unsafe_allow_html=True)
 
-        with col2:
-            st.markdown('<h3 class="section-title">📈 Resume Score</h3>', unsafe_allow_html=True)
-            score = result.get("score", 0)
-            st.markdown(
-                f"""
-                <div class="score-box">
-                    <div class="score-label">Resume Strength</div>
-                    <div class="score-value">{score} / 10</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+def render_analyzer_page() -> None:
+    """Render the main resume analyzer workflow."""
+    st.subheader("Analyze Resume")
+    uploaded_file = st.file_uploader("Upload Resume PDF", type=["pdf"], key="main_uploader")
+    job_description = st.text_area("Paste Job Description (optional)", height=150)
+
+    if st.button("Analyze Resume", type="primary"):
+        if not uploaded_file:
+            st.error("Please upload a resume PDF before analysis.")
+            return
+
+        with st.spinner("Analyzing resume..."):
+            result = analyze_resume_file(uploaded_file.getvalue(), job_description)
+
+        if "error" in result:
+            st.error(result["error"])
+            return
+
+        score = result["score"]["score"]
+        st.success("Analysis completed successfully.")
+
+        left_col, right_col = st.columns(2)
+        with left_col:
+            st.metric("Weighted Resume Score", f"{score} / 100")
+            st.progress(min(max(score / 100, 0.0), 1.0))
+            st.metric("Predicted Role", result["role"])
+
+        with right_col:
+            match_percentage = result["job_match"]["match_percentage"] if job_description.strip() else 0
+            st.metric("Job Match", f"{match_percentage}%")
+            st.metric("Detected Skills", len(result["skills"]))
+
+        st.subheader("Key Insight")
+        st.info(result["key_insight"])
+
+        st.subheader("Role Confidence Panel")
+        confidence_rows = [
+            {"Role": role_name, "Confidence (%)": confidence}
+            for role_name, confidence in sorted(
+                result["role_confidence"].items(), key=lambda item: item[1], reverse=True
             )
+        ]
+        st.table(confidence_rows)
 
-            st.markdown("### 🎯 Predicted Role")
-            role = result.get("role", "General Tech Role")
-            st.markdown(f'<span class="role-badge">{role}</span>', unsafe_allow_html=True)
-
-        st.markdown('<h3 class="section-title">💡 Suggestions</h3>', unsafe_allow_html=True)
-        suggestions = result.get("suggestions", [])
-        if suggestions:
-            suggestion_lines = "".join([f"<li>{s}</li>" for s in suggestions])
-            st.markdown(
-                f"""
-                <div class="section-card">
-                    <ul>{suggestion_lines}</ul>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+        st.subheader("Skills Overview")
+        st.write("### Detected Skills")
+        if result["skills"]:
+            st.success(", ".join(skill.title() for skill in result["skills"]))
         else:
-            st.markdown('<div class="section-card">No suggestions available.</div>', unsafe_allow_html=True)
+            st.warning("No skills detected. Please verify your PDF text is selectable.")
 
-        breakdown = result.get("breakdown", {})
-
-        st.markdown("### 📊 Score Breakdown")
-
-        st.progress(min(max(breakdown.get("skills", 0) / 10, 0.0), 1.0))
-        st.caption("Skills")
-
-        st.progress(min(max(breakdown.get("projects", 0) / 10, 0.0), 1.0))
-        st.caption("Projects")
-
-        st.progress(min(max(breakdown.get("experience", 0) / 10, 0.0), 1.0))
-        st.caption("Experience")
-
-        if job_text and job_text.strip():
-            st.markdown("### 🧩 Job Description Match")
-
-            match_percentage = jd_result.get("match_percentage", 0)
-
-            if match_percentage < 40:
-                match_class = "match-low"
-                match_status = "Low Match"
-            elif match_percentage < 70:
-                match_class = "match-medium"
-                match_status = "Moderate Match"
+        if job_description.strip():
+            st.write("### Missing Skills")
+            missing_skills = result["job_match"]["missing_skills"]
+            if missing_skills:
+                st.error(", ".join(skill.title() for skill in missing_skills))
             else:
-                match_class = "match-high"
-                match_status = "Strong Match"
+                st.success("No missing skills found for this job description.")
 
-            st.markdown(
-                f"""
-                <div class="match-box {match_class}">
-                    <div class="score-label">Match Percentage</div>
-                    <div class="score-value">{match_percentage}%</div>
-                    <div class="score-label">{match_status}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            st.write("### Job Match Level")
+            match_level = result["job_match"].get("match_level", "Low Match")
+            st.progress(min(max(result["job_match"]["match_percentage"] / 100, 0.0), 1.0))
+            st.write(f"Match: {result['job_match']['match_percentage']}% ({match_level})")
 
-            compare_col1, compare_col2 = st.columns(2)
+            st.subheader("Skill Gap Roadmap")
+            for step in result["roadmap"]:
+                st.write(f"- {step}")
+        else:
+            st.info("Add a job description to see match percentage and missing skills.")
 
-            with compare_col1:
-                st.markdown("#### ✅ Matching Skills")
-                matched_skills = jd_result.get("matched_skills", [])
-                if matched_skills:
-                    matched_lines = "".join([f"<li>{skill.title()}</li>" for skill in matched_skills])
-                    st.markdown(
-                        f"""
-                        <div class="section-card">
-                            <ul style="margin: 0; padding-left: 18px;">{matched_lines}</ul>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.markdown('<div class="section-card">No matching skills found.</div>', unsafe_allow_html=True)
+        st.subheader("Recommendations")
+        for suggestion in result["score"]["suggestions"]:
+            st.write(f"- {suggestion}")
 
-            with compare_col2:
-                st.markdown("#### ⚠️ Missing Skills")
-                missing_skills = jd_result.get("missing_skills", [])
-                if missing_skills:
-                    missing_lines = "".join([f"<li>{skill.title()}</li>" for skill in missing_skills])
-                    st.markdown(
-                        f"""
-                        <div class="missing-card">
-                            <ul>{missing_lines}</ul>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.markdown('<div class="section-card">No missing skills. Great match!</div>', unsafe_allow_html=True)
+        st.subheader("Score Breakdown")
+        render_breakdown(result["score"]["breakdown"])
 
-            st.markdown("#### 🎯 Recommended Skills to Learn")
-            recommended_skills = jd_result.get("recommended_skills", [])
-            if recommended_skills:
-                recommended_lines = "".join([f"<li>{skill.title()}</li>" for skill in recommended_skills])
-                st.markdown(
-                    f"""
-                    <div class="section-card">
-                        <ul>{recommended_lines}</ul>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown('<div class="section-card">No recommended skills. Your resume covers the job keywords well.</div>', unsafe_allow_html=True)
-
-        report_payload = dict(result)
-        if job_text and job_text.strip():
-            report_payload["job_match"] = jd_result
-
-        pdf_report = generate_pdf_report(report_payload)
-
-        st.markdown("### 📥 Download Report")
         st.download_button(
-            label="Download Professional Report",
-            data=pdf_report,
-            file_name="resume_report.pdf",
+            label="Download PDF Report",
+            data=result["pdf_bytes"],
+            file_name="resume_analysis_report.pdf",
             mime="application/pdf",
         )
 
-        st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("---")
+def render_comparison_page() -> None:
+    """Render a side-by-side comparison for two resume PDFs."""
+    st.subheader("Resume Comparison")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        resume_a = st.file_uploader("Upload Resume A", type=["pdf"], key="compare_a")
+    with col2:
+        resume_b = st.file_uploader("Upload Resume B", type=["pdf"], key="compare_b")
+
+    if st.button("Compare Resumes"):
+        if not resume_a or not resume_b:
+            st.error("Please upload both resumes to compare.")
+            return
+
+        summary_a = quick_resume_summary(resume_a.getvalue())
+        summary_b = quick_resume_summary(resume_b.getvalue())
+
+        if "error" in summary_a or "error" in summary_b:
+            st.error("One of the files has no extractable text. Please try another PDF.")
+            return
+
+        score_a = summary_a["score"]
+        score_b = summary_b["score"]
+
+        result_col1, result_col2 = st.columns(2)
+        with result_col1:
+            st.metric("Resume A Score", f"{score_a} / 100")
+            st.metric("Resume A Role", summary_a["role"])
+            st.caption("Top Skills")
+            st.write(", ".join(skill.title() for skill in summary_a["skills"][:10]) or "No skills detected")
+
+        with result_col2:
+            st.metric("Resume B Score", f"{score_b} / 100")
+            st.metric("Resume B Role", summary_b["role"])
+            st.caption("Top Skills")
+            st.write(", ".join(skill.title() for skill in summary_b["skills"][:10]) or "No skills detected")
+
+        if score_a > score_b:
+            st.success("Resume A currently scores higher.")
+        elif score_b > score_a:
+            st.success("Resume B currently scores higher.")
+        else:
+            st.info("Both resumes have the same score.")
+
+
+def main() -> None:
+    """Application entry function."""
+    st.title(APP_TITLE)
+    st.caption("Professional, beginner-friendly resume intelligence for internships and job preparation.")
+
+    with st.sidebar:
+        st.header("Navigation")
+        page = st.radio("Go to", ["Resume Analyzer", "Resume Comparison"])
+        theme = st.selectbox("Theme", ["Light", "Dark"], index=0)
+
+    apply_theme(theme)
+
+    if page == "Resume Analyzer":
+        render_analyzer_page()
+    else:
+        render_comparison_page()
+
+
+if __name__ == "__main__":
+    main()

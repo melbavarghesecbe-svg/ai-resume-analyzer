@@ -1,0 +1,52 @@
+{
+  "Data Analyst": [
+    "python",
+    "sql",
+    "excel",
+    "power bi",
+    "tableau",
+    "data analysis",
+    "data visualization",
+    "statistics",
+    "pandas",
+    "numpy"
+  ],
+  "ML Engineer": [
+    "python",
+    "machine learning",
+    "scikit learn",
+    "tensorflow",
+    "pytorch",
+    "numpy",
+    "pandas",
+    "nlp",
+    "computer vision",
+    "sql"
+  ],
+  "Frontend Developer": [
+    "html",
+    "css",
+    "javascript",
+    "typescript",
+    "react",
+    "nextjs",
+    "git",
+    "github",
+    "testing",
+    "rest api"
+  ],
+  "Backend Developer": [
+    "python",
+    "java",
+    "nodejs",
+    "express",
+    "django",
+    "flask",
+    "fastapi",
+    "sql",
+    "mongodb",
+    "docker",
+    "aws",
+    "rest api"
+  ]
+}
