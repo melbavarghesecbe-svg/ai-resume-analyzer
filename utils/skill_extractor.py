@@ -4,13 +4,15 @@ import json
 from functools import lru_cache
 
 from config import SKILLS_FILE
-from utils.text_cleaner import clean_text
+from utils.cleaner import normalize_text
 
 # Basic synonym mapping requested in the project requirements.
 SYNONYM_MAP = {
     "js": "javascript",
     "ml": "machine learning",
     "py": "python",
+    "postgres": "postgresql",
+    "node": "nodejs",
 }
 
 
@@ -21,12 +23,17 @@ def _load_skills() -> list[str]:
         skills = json.load(file)
 
     # Normalize once so extraction logic stays simple and consistent.
-    return sorted({clean_text(skill) for skill in skills if clean_text(skill)})
+    normalized = []
+    for skill in skills:
+        skill_text = normalize_text(skill)
+        if skill_text:
+            normalized.append(skill_text)
+    return sorted(set(normalized))
 
 
 def _normalize_with_synonyms(text: str) -> str:
     """Normalize text and replace known short aliases with canonical names."""
-    normalized = clean_text(text)
+    normalized = normalize_text(text)
     tokens = [SYNONYM_MAP.get(token, token) for token in normalized.split()]
     return " ".join(tokens)
 

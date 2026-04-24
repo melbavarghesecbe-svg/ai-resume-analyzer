@@ -5,25 +5,166 @@ import io
 import streamlit as st
 
 from config import APP_TITLE
+from utils.insights import evaluate_target_role_strength
 from utils.matcher import build_skill_gap_roadmap, match_resume_to_job
 from utils.parser import extract_text_from_pdf
 from utils.report import generate_pdf
-from utils.role_predictor import get_role_confidence, predict_role
+from utils.role_predictor import get_role_confidence, get_role_skills, predict_role
 from utils.scorer import calculate_resume_score
 from utils.skill_extractor import extract_skills
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
 
 
+def _to_progress(value: float) -> float:
+    """Convert percentage values to Streamlit progress range [0, 1]."""
+    return min(max(value / 100, 0.0), 1.0)
+
+
+def _format_skills(skills: list[str], limit: int | None = None) -> str:
+    """Format skill list as title-cased comma-separated text."""
+    chosen = skills[:limit] if limit is not None else skills
+    return ", ".join(skill.title() for skill in chosen)
+
+
+def _render_bullets(lines: list[str]) -> None:
+    """Render list values as bullet-like lines in Streamlit."""
+    for line in lines:
+        st.write(f"- {line}")
+
+
 def apply_theme(theme_name: str) -> None:
-    """Apply a basic light/dark theme using custom CSS."""
+    """Apply polished light/dark styling with dashboard-like visual hierarchy."""
     if theme_name == "Dark":
         st.markdown(
             """
             <style>
-            .stApp {background: #0f172a; color: #e2e8f0;}
-            section[data-testid="stSidebar"] {background: #111827;}
-            div[data-testid="stMetric"] {background: #1f2937; padding: 8px; border-radius: 10px;}
+            @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@500;700&display=swap');
+
+            :root {
+                --bg-main: radial-gradient(circle at 15% 15%, #16274a 0%, #0b1733 45%, #060f25 100%);
+                --bg-surface-strong: rgba(21, 34, 64, 0.92);
+                --bg-sidebar: linear-gradient(180deg, #0a1228 0%, #0a1730 100%);
+                --border-soft: rgba(147, 197, 253, 0.18);
+                --border-focus: rgba(56, 189, 248, 0.42);
+                --text-main: #e6edf9;
+                --text-muted: #a9b7d4;
+                --accent-a: #38bdf8;
+                --accent-b: #22d3ee;
+            }
+
+            .stApp {
+                background: var(--bg-main);
+                color: var(--text-main);
+                font-family: 'Manrope', 'Segoe UI', sans-serif;
+            }
+
+            .block-container {
+                padding-top: 1.5rem;
+                max-width: 1180px;
+            }
+
+            h1, h2, h3, h4, h5 {
+                font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+                color: var(--text-main);
+            }
+
+            p, li, label, span {
+                color: var(--text-main);
+            }
+
+            section[data-testid="stSidebar"] {
+                background: var(--bg-sidebar);
+                border-right: 1px solid var(--border-soft);
+                width: 360px;
+                min-width: 360px;
+            }
+
+            section[data-testid="stSidebar"] * {
+                color: var(--text-main);
+            }
+
+            .nav-title {
+                font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+                font-size: 2rem;
+                font-weight: 800;
+                margin: 0 0 8px 0;
+            }
+
+            .nav-subtitle {
+                color: var(--text-muted);
+                margin: 0 0 14px 0;
+                font-weight: 600;
+                font-size: 1rem;
+            }
+
+            section[data-testid="stSidebar"] [data-testid="stRadio"] {
+                padding: 16px;
+                border-radius: 16px;
+                border: 1px solid var(--border-focus);
+                background: linear-gradient(180deg, rgba(56, 189, 248, 0.16), rgba(56, 189, 248, 0.07));
+                margin-bottom: 14px;
+            }
+
+            section[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] label,
+            section[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] label p,
+            section[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] label span {
+                font-size: 1.12rem;
+                font-weight: 700;
+            }
+
+            div[data-testid="stMetric"],
+            div[data-testid="stFileUploader"],
+            div[data-testid="stTextArea"],
+            div[data-testid="stSelectbox"],
+            div[data-testid="stRadio"] {
+                background: var(--bg-surface-strong);
+                border: 1px solid var(--border-soft);
+                border-radius: 12px;
+                padding: 8px;
+            }
+
+            button[kind="primary"] {
+                background: linear-gradient(120deg, var(--accent-a), var(--accent-b));
+                color: #031126;
+                border: none;
+                border-radius: 10px;
+                font-weight: 700;
+            }
+
+            .app-hero {
+                background: linear-gradient(120deg, rgba(56, 189, 248, 0.18), rgba(34, 211, 238, 0.15));
+                border: 1px solid var(--border-focus);
+                border-radius: 18px;
+                padding: 20px 24px;
+                margin-bottom: 20px;
+            }
+
+            .app-hero p {
+                color: var(--text-muted);
+            }
+
+            .dashboard-card, .workflow-step, .utility-card {
+                background: var(--bg-surface-strong);
+                border: 1px solid var(--border-soft);
+                border-radius: 12px;
+                padding: 16px;
+            }
+
+            .feature-row {
+                margin-top: 10px;
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+
+            .feature-chip {
+                background: rgba(56, 189, 248, 0.14);
+                border: 1px solid var(--border-soft);
+                border-radius: 999px;
+                padding: 4px 12px;
+                font-size: 0.82rem;
+            }
             </style>
             """,
             unsafe_allow_html=True,
@@ -32,13 +173,228 @@ def apply_theme(theme_name: str) -> None:
         st.markdown(
             """
             <style>
-            .stApp {background: #f8fafc; color: #0f172a;}
-            section[data-testid="stSidebar"] {background: #e2e8f0;}
-            div[data-testid="stMetric"] {background: #ffffff; padding: 8px; border-radius: 10px;}
+            @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Grotesk:wght@500;700&display=swap');
+
+            :root {
+                --bg-main: radial-gradient(circle at 15% 15%, #f3f8ff 0%, #eef4ff 45%, #f7fbff 100%);
+                --bg-surface: rgba(255, 255, 255, 0.92);
+                --bg-sidebar: linear-gradient(180deg, #e9f1ff 0%, #dce8fb 100%);
+                --border-soft: rgba(30, 64, 175, 0.16);
+                --border-focus: rgba(14, 116, 144, 0.35);
+                --text-main: #0f1f3d;
+                --text-muted: #4d6187;
+                --accent-a: #0ea5e9;
+                --accent-b: #0891b2;
+            }
+
+            .stApp {
+                background: var(--bg-main);
+                color: var(--text-main);
+                font-family: 'Manrope', 'Segoe UI', sans-serif;
+            }
+
+            .block-container {
+                padding-top: 1.5rem;
+                max-width: 1180px;
+            }
+
+            h1, h2, h3, h4, h5 {
+                font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+                color: var(--text-main);
+            }
+
+            section[data-testid="stSidebar"] {
+                background: var(--bg-sidebar);
+                border-right: 1px solid var(--border-soft);
+                width: 360px;
+                min-width: 360px;
+            }
+
+            .nav-title {
+                font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+                font-size: 2rem;
+                font-weight: 800;
+                margin: 0 0 8px 0;
+            }
+
+            .nav-subtitle {
+                color: var(--text-muted);
+                margin: 0 0 14px 0;
+                font-weight: 600;
+                font-size: 1rem;
+            }
+
+            section[data-testid="stSidebar"] [data-testid="stRadio"] {
+                padding: 16px;
+                border-radius: 16px;
+                border: 1px solid var(--border-focus);
+                background: linear-gradient(180deg, rgba(14, 165, 233, 0.12), rgba(14, 165, 233, 0.05));
+                margin-bottom: 14px;
+            }
+
+            section[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] label,
+            section[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] label p,
+            section[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] label span {
+                font-size: 1.12rem;
+                font-weight: 700;
+            }
+
+            div[data-testid="stMetric"],
+            div[data-testid="stFileUploader"],
+            div[data-testid="stTextArea"],
+            div[data-testid="stSelectbox"],
+            div[data-testid="stRadio"] {
+                background: var(--bg-surface);
+                border: 1px solid var(--border-soft);
+                border-radius: 12px;
+                padding: 8px;
+            }
+
+            button[kind="primary"] {
+                background: linear-gradient(120deg, var(--accent-a), var(--accent-b));
+                color: #ffffff;
+                border: none;
+                border-radius: 10px;
+                font-weight: 700;
+            }
+
+            .app-hero {
+                background: linear-gradient(120deg, rgba(14, 165, 233, 0.16), rgba(8, 145, 178, 0.11));
+                border: 1px solid var(--border-focus);
+                border-radius: 18px;
+                padding: 20px 24px;
+                margin-bottom: 20px;
+            }
+
+            .app-hero p {
+                color: var(--text-muted);
+            }
+
+            .dashboard-card, .workflow-step, .utility-card {
+                background: var(--bg-surface);
+                border: 1px solid var(--border-soft);
+                border-radius: 12px;
+                padding: 16px;
+            }
+
+            .feature-row {
+                margin-top: 10px;
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+
+            .feature-chip {
+                background: rgba(14, 165, 233, 0.14);
+                border: 1px solid var(--border-soft);
+                border-radius: 999px;
+                padding: 4px 12px;
+                font-size: 0.82rem;
+            }
             </style>
             """,
             unsafe_allow_html=True,
         )
+
+
+def render_hero() -> None:
+    """Render app hero section."""
+    st.markdown(
+        f"""
+        <div class="app-hero">
+            <h1>{APP_TITLE}</h1>
+            <p>Professional, beginner-friendly resume intelligence for internships and job preparation.</p>
+            <div class="feature-row">
+                <span class="feature-chip">AI Score Insights</span>
+                <span class="feature-chip">Role Prediction</span>
+                <span class="feature-chip">PDF Reports</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_sidebar_utilities(selected_page: str) -> None:
+    """Render useful sidebar context cards."""
+    st.sidebar.markdown(
+        f"""
+        <div class="utility-card">
+            <h5>Current View</h5>
+            <p>You are in <strong>{selected_page}</strong>. Use this panel to move through the resume workflow.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.sidebar.markdown(
+        """
+        <div class="utility-card">
+            <h5>Best Practice</h5>
+            <p>Analyze first, improve second, compare versions third.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_dashboard_page() -> None:
+    """Render dashboard landing page."""
+    st.subheader("Dashboard")
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("Modules", "3", help="Analyzer, Comparison, PDF Report")
+    with c2:
+        st.metric("Score Scale", "0 - 100")
+    with c3:
+        st.metric("Input Formats", "PDF")
+    with c4:
+        st.metric("Comparison Mode", "2 Resumes")
+
+    top1, top2, top3 = st.columns(3)
+    with top1:
+        st.markdown(
+            """
+            <div class="dashboard-card">
+                <h4>Resume Analyzer</h4>
+                <p>Upload one resume, paste a JD, and get score, role prediction, match, and roadmap.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with top2:
+        st.markdown(
+            """
+            <div class="dashboard-card">
+                <h4>Resume Comparison</h4>
+                <p>Compare two resume versions side by side and pick the stronger one.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with top3:
+        st.markdown(
+            """
+            <div class="dashboard-card">
+                <h4>Export Report</h4>
+                <p>Download a clean PDF report with score, role, match, and recommendations.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.write("")
+    st.markdown("### Customer Workflow")
+    w1, w2, w3, w4 = st.columns(4)
+    with w1:
+        st.markdown("<div class='workflow-step'><h5>1. Upload Resume</h5><p>Set your baseline score.</p></div>", unsafe_allow_html=True)
+    with w2:
+        st.markdown("<div class='workflow-step'><h5>2. Analyze Fit</h5><p>See match and missing skills.</p></div>", unsafe_allow_html=True)
+    with w3:
+        st.markdown("<div class='workflow-step'><h5>3. Improve Version</h5><p>Use roadmap and suggestions.</p></div>", unsafe_allow_html=True)
+    with w4:
+        st.markdown("<div class='workflow-step'><h5>4. Compare + Finalize</h5><p>Select your best resume version.</p></div>", unsafe_allow_html=True)
 
 
 @st.cache_data(show_spinner=False)
@@ -59,45 +415,34 @@ def analyze_resume_file(file_bytes: bytes, job_description: str) -> dict:
         job_match=job_match if job_description.strip() else None,
     )
 
-    roadmap = build_skill_gap_roadmap(job_match.get("missing_skills", [])) if job_description.strip() else []
-
-    key_insight = "Your profile shows strong fundamentals and is ready for targeted improvements."
-    if job_description.strip() and job_match.get("missing_skills"):
-        top_missing = ", ".join(skill.title() for skill in job_match["missing_skills"][:3])
-        key_insight = (
-            "Your profile shows strong programming fundamentals but lacks core skills for this role: "
-            f"{top_missing}."
-        )
+    insight = score_data.get("insight", "Profile has potential with targeted improvements.")
 
     report_payload = {
         "role": predicted_role,
         "score": score_data["score"],
         "match_percentage": job_match["match_percentage"],
-        "match_level": job_match.get("match_level", "Low Match"),
-        "role_confidence": role_confidence,
+        "match_level": job_match.get("match_level", "Low"),
         "skills": skills,
         "missing_skills": job_match["missing_skills"],
         "suggestions": score_data["suggestions"],
         "breakdown": score_data["breakdown"],
-        "key_insight": key_insight,
+        "insight": insight,
     }
 
     return {
-        "resume_text": resume_text,
         "skills": skills,
         "role": predicted_role,
         "role_confidence": role_confidence,
         "job_match": job_match,
         "score": score_data,
-        "roadmap": roadmap,
-        "key_insight": key_insight,
+        "insight": insight,
         "pdf_bytes": generate_pdf(report_payload),
     }
 
 
 @st.cache_data(show_spinner=False)
 def quick_resume_summary(file_bytes: bytes) -> dict:
-    """Generate a quick score/role summary used by resume comparison."""
+    """Generate quick score/role summary for comparison."""
     resume_text = extract_text_from_pdf(io.BytesIO(file_bytes))
     if not resume_text:
         return {"error": "No extractable text found."}
@@ -106,15 +451,11 @@ def quick_resume_summary(file_bytes: bytes) -> dict:
     role = predict_role(skills)
     score_data = calculate_resume_score(resume_text, skills)
 
-    return {
-        "role": role,
-        "score": score_data["score"],
-        "skills": skills,
-    }
+    return {"role": role, "score": score_data["score"], "skills": skills}
 
 
 def render_breakdown(breakdown: dict) -> None:
-    """Render each weighted score component as a progress bar."""
+    """Render weighted score components as progress bars."""
     labels = {
         "skill_score": "Skill Score",
         "project_score": "Project Score",
@@ -126,96 +467,151 @@ def render_breakdown(breakdown: dict) -> None:
     for key, label in labels.items():
         value = breakdown.get(key, 0)
         st.write(f"{label}: {value}%")
-        st.progress(min(max(value / 100, 0.0), 1.0))
+        st.progress(_to_progress(value))
+
+
+def render_discovery_results(result: dict) -> None:
+    """Render results for beginners exploring suitable roles."""
+    st.success("Career discovery analysis completed.")
+
+    score = result["score"]["score"]
+    st.metric("Overall Resume Score", f"{score} / 100")
+    st.progress(_to_progress(score))
+
+    st.subheader("Best-Fit Roles From Your Current Resume")
+    ranked_roles = sorted(result["role_confidence"].items(), key=lambda item: item[1], reverse=True)
+    role_rows = [{"Role": role_name, "Fit Confidence (%)": confidence} for role_name, confidence in ranked_roles]
+    st.table(role_rows)
+
+    top_role, top_conf = ranked_roles[0]
+    st.success(f"Top suggested role right now: {top_role} ({top_conf}%)")
+
+    st.subheader("Detected Strength Signals")
+    if result["skills"]:
+        st.write(_format_skills(result["skills"], limit=12))
+    else:
+        st.warning("No clear skills were detected. Try a text-selectable PDF.")
+
+    st.subheader("Insight")
+    st.info(result["insight"])
+
+    st.subheader("Beginner Improvement Priorities")
+    _render_bullets(result["score"].get("suggestions", []))
+
+
+def render_target_role_results(result: dict, target_eval: dict, jd_used: bool) -> None:
+    """Render results for 4th-year users with target role focus."""
+    st.success("Target role strength analysis completed.")
+
+    score = result["score"]["score"]
+    st.metric("Overall Resume Score", f"{score} / 100")
+    st.progress(_to_progress(score))
+
+    st.subheader("Target Role Strength")
+    st.metric(f"{target_eval['target_role']} Strength", f"{target_eval['strength']}% ({target_eval['level']})")
+    st.progress(_to_progress(target_eval["strength"]))
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write("### Matched Role Skills")
+        if target_eval["matched_skills"]:
+            st.success(_format_skills(target_eval["matched_skills"]))
+        else:
+            st.warning("No direct role-skill matches yet.")
+    with col2:
+        st.write("### Missing Role Skills")
+        if target_eval["missing_skills"]:
+            st.error(_format_skills(target_eval["missing_skills"]))
+        else:
+            st.success("Great coverage for this role.")
+
+    if jd_used:
+        st.subheader("Job Description Match")
+        jd_match = result["job_match"]["match_percentage"]
+        jd_level = result["job_match"].get("match_level", "Low")
+        st.write(f"Match: {jd_match}% ({jd_level})")
+        st.progress(_to_progress(jd_match))
+
+    st.subheader("Action Plan To Improve Target Readiness")
+    roadmap = build_skill_gap_roadmap(target_eval["missing_skills"])
+    _render_bullets(roadmap)
 
 
 def render_analyzer_page() -> None:
-    """Render the main resume analyzer workflow."""
-    st.subheader("Analyze Resume")
-    uploaded_file = st.file_uploader("Upload Resume PDF", type=["pdf"], key="main_uploader")
-    job_description = st.text_area("Paste Job Description (optional)", height=150)
+    """Render two analyzer workflows: Beginner and 4th-Year."""
+    st.subheader("Resume Analyzer")
+    beginner_tab, advanced_tab = st.tabs([
+        "Career Discovery (Beginner)",
+        "Target Role Strength (4th Year)",
+    ])
 
-    if st.button("Analyze Resume", type="primary"):
-        if not uploaded_file:
-            st.error("Please upload a resume PDF before analysis.")
-            return
+    with beginner_tab:
+        st.caption("For students exploring career direction.")
+        beginner_file = st.file_uploader("Upload Resume PDF", type=["pdf"], key="discover_uploader")
 
-        with st.spinner("Analyzing resume..."):
-            result = analyze_resume_file(uploaded_file.getvalue(), job_description)
-
-        if "error" in result:
-            st.error(result["error"])
-            return
-
-        score = result["score"]["score"]
-        st.success("Analysis completed successfully.")
-
-        left_col, right_col = st.columns(2)
-        with left_col:
-            st.metric("Weighted Resume Score", f"{score} / 100")
-            st.progress(min(max(score / 100, 0.0), 1.0))
-            st.metric("Predicted Role", result["role"])
-
-        with right_col:
-            match_percentage = result["job_match"]["match_percentage"] if job_description.strip() else 0
-            st.metric("Job Match", f"{match_percentage}%")
-            st.metric("Detected Skills", len(result["skills"]))
-
-        st.subheader("Key Insight")
-        st.info(result["key_insight"])
-
-        st.subheader("Role Confidence Panel")
-        confidence_rows = [
-            {"Role": role_name, "Confidence (%)": confidence}
-            for role_name, confidence in sorted(
-                result["role_confidence"].items(), key=lambda item: item[1], reverse=True
-            )
-        ]
-        st.table(confidence_rows)
-
-        st.subheader("Skills Overview")
-        st.write("### Detected Skills")
-        if result["skills"]:
-            st.success(", ".join(skill.title() for skill in result["skills"]))
-        else:
-            st.warning("No skills detected. Please verify your PDF text is selectable.")
-
-        if job_description.strip():
-            st.write("### Missing Skills")
-            missing_skills = result["job_match"]["missing_skills"]
-            if missing_skills:
-                st.error(", ".join(skill.title() for skill in missing_skills))
+        if st.button("Discover My Best Roles", type="primary"):
+            if not beginner_file:
+                st.error("Please upload a resume PDF before analysis.")
             else:
-                st.success("No missing skills found for this job description.")
+                with st.spinner("Analyzing your resume for role fit and quality..."):
+                    result = analyze_resume_file(beginner_file.getvalue(), "")
 
-            st.write("### Job Match Level")
-            match_level = result["job_match"].get("match_level", "Low Match")
-            st.progress(min(max(result["job_match"]["match_percentage"] / 100, 0.0), 1.0))
-            st.write(f"Match: {result['job_match']['match_percentage']}% ({match_level})")
+                if "error" in result:
+                    st.error(result["error"])
+                else:
+                    render_discovery_results(result)
+                    st.subheader("Score Breakdown")
+                    render_breakdown(result["score"]["breakdown"])
 
-            st.subheader("Skill Gap Roadmap")
-            for step in result["roadmap"]:
-                st.write(f"- {step}")
-        else:
-            st.info("Add a job description to see match percentage and missing skills.")
+                    st.download_button(
+                        label="Download Career Discovery Report",
+                        data=result["pdf_bytes"],
+                        file_name="career_discovery_report.pdf",
+                        mime="application/pdf",
+                    )
 
-        st.subheader("Recommendations")
-        for suggestion in result["score"]["suggestions"]:
-            st.write(f"- {suggestion}")
+    with advanced_tab:
+        st.caption("For final-year students who know their target field and want role-specific strength.")
+        advanced_file = st.file_uploader("Upload Resume PDF", type=["pdf"], key="target_uploader")
 
-        st.subheader("Score Breakdown")
-        render_breakdown(result["score"]["breakdown"])
-
-        st.download_button(
-            label="Download PDF Report",
-            data=result["pdf_bytes"],
-            file_name="resume_analysis_report.pdf",
-            mime="application/pdf",
+        role_options = sorted(get_role_confidence([]).keys())
+        target_role = st.selectbox("Select Your Target Role", role_options, index=0)
+        job_description = st.text_area(
+            "Paste Job Description (optional for stricter matching)",
+            height=140,
+            key="target_jd",
         )
+
+        if st.button("Evaluate My Target Role Strength", type="primary"):
+            if not advanced_file:
+                st.error("Please upload a resume PDF before analysis.")
+            else:
+                with st.spinner("Evaluating role-specific strength..."):
+                    result = analyze_resume_file(advanced_file.getvalue(), job_description)
+
+                if "error" in result:
+                    st.error(result["error"])
+                else:
+                    target_eval = evaluate_target_role_strength(
+                        result["skills"],
+                        get_role_skills(target_role),
+                        target_role,
+                    )
+                    render_target_role_results(result, target_eval, bool(job_description.strip()))
+
+                    st.subheader("Score Breakdown")
+                    render_breakdown(result["score"]["breakdown"])
+
+                    st.download_button(
+                        label="Download Target Role Report",
+                        data=result["pdf_bytes"],
+                        file_name="target_role_resume_report.pdf",
+                        mime="application/pdf",
+                    )
 
 
 def render_comparison_page() -> None:
-    """Render a side-by-side comparison for two resume PDFs."""
+    """Render side-by-side comparison for two resume PDFs."""
     st.subheader("Resume Comparison")
     col1, col2 = st.columns(2)
 
@@ -236,25 +632,22 @@ def render_comparison_page() -> None:
             st.error("One of the files has no extractable text. Please try another PDF.")
             return
 
-        score_a = summary_a["score"]
-        score_b = summary_b["score"]
-
-        result_col1, result_col2 = st.columns(2)
-        with result_col1:
-            st.metric("Resume A Score", f"{score_a} / 100")
+        left, right = st.columns(2)
+        with left:
+            st.metric("Resume A Score", f"{summary_a['score']} / 100")
             st.metric("Resume A Role", summary_a["role"])
             st.caption("Top Skills")
-            st.write(", ".join(skill.title() for skill in summary_a["skills"][:10]) or "No skills detected")
+            st.write(_format_skills(summary_a["skills"], limit=10) or "No skills detected")
 
-        with result_col2:
-            st.metric("Resume B Score", f"{score_b} / 100")
+        with right:
+            st.metric("Resume B Score", f"{summary_b['score']} / 100")
             st.metric("Resume B Role", summary_b["role"])
             st.caption("Top Skills")
-            st.write(", ".join(skill.title() for skill in summary_b["skills"][:10]) or "No skills detected")
+            st.write(_format_skills(summary_b["skills"], limit=10) or "No skills detected")
 
-        if score_a > score_b:
+        if summary_a["score"] > summary_b["score"]:
             st.success("Resume A currently scores higher.")
-        elif score_b > score_a:
+        elif summary_b["score"] > summary_a["score"]:
             st.success("Resume B currently scores higher.")
         else:
             st.info("Both resumes have the same score.")
@@ -262,17 +655,19 @@ def render_comparison_page() -> None:
 
 def main() -> None:
     """Application entry function."""
-    st.title(APP_TITLE)
-    st.caption("Professional, beginner-friendly resume intelligence for internships and job preparation.")
-
     with st.sidebar:
-        st.header("Navigation")
-        page = st.radio("Go to", ["Resume Analyzer", "Resume Comparison"])
+        st.markdown("<div class='nav-title'>Navigation</div>", unsafe_allow_html=True)
+        st.markdown("<div class='nav-subtitle'>Choose a page to move through your workflow</div>", unsafe_allow_html=True)
+        page = st.radio("Go to", ["Dashboard", "Resume Analyzer", "Resume Comparison"])
         theme = st.selectbox("Theme", ["Light", "Dark"], index=0)
 
     apply_theme(theme)
+    render_sidebar_utilities(page)
+    render_hero()
 
-    if page == "Resume Analyzer":
+    if page == "Dashboard":
+        render_dashboard_page()
+    elif page == "Resume Analyzer":
         render_analyzer_page()
     else:
         render_comparison_page()

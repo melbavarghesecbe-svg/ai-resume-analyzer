@@ -2,7 +2,7 @@
 
 from PyPDF2 import PdfReader
 
-from utils.text_cleaner import clean_text
+from utils.cleaner import normalize_text
 
 
 def extract_text_from_pdf(file) -> str:
@@ -26,4 +26,4 @@ def extract_text_from_pdf(file) -> str:
             pages_text.append("")
 
     raw_text = " ".join(pages_text).strip()
-    return clean_text(raw_text)
+    return normalize_text(raw_text)

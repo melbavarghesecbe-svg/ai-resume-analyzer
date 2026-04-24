@@ -3,7 +3,7 @@
 import json
 from functools import lru_cache
 
-from config import ROLES_FILE
+from config import ROLE_MATCH_THRESHOLD, ROLES_FILE
 
 
 @lru_cache(maxsize=1)
@@ -21,16 +21,12 @@ def get_role_skills(role_name: str) -> list[str]:
 
 
 def get_role_confidence(skills: list[str]) -> dict[str, float]:
-    """Return normalized confidence scores for each role.
-
-    Confidence is computed as:
-        overlap_with_role_skills / number_of_role_skills * 100
-    """
+    """Return normalized confidence scores for each role."""
     if not skills:
         return {role: 0.0 for role in _load_role_map()}
 
     skill_set = set(skill.lower() for skill in skills)
-    confidence_scores = {}
+    confidence_scores: dict[str, float] = {}
 
     for role, role_skills in _load_role_map().items():
         if not role_skills:
@@ -44,21 +40,20 @@ def get_role_confidence(skills: list[str]) -> dict[str, float]:
 
 
 def predict_role(skills: list[str]) -> str:
-    """Predict the best matching role from detected resume skills.
-
-    The score for each role is normalized overlap:
-        overlap / number_of_role_skills
-    A minimum threshold is used to avoid overconfident predictions.
-    """
-    role_confidence = get_role_confidence(skills)
-    if not role_confidence:
+    """Predict the best matching role from detected resume skills."""
+    confidence = get_role_confidence(skills)
+    if not confidence:
         return "General Tech Role"
 
-    best_role, best_percent = max(role_confidence.items(), key=lambda item: item[1])
-    best_score = best_percent / 100
-
-    # If role confidence is too low, avoid a misleading specialized label.
-    if best_score < 0.4:
+    best_role, best_percent = max(confidence.items(), key=lambda item: item[1])
+    if (best_percent / 100) < ROLE_MATCH_THRESHOLD:
         return "General Tech Role"
 
     return best_role
+
+
+def predict_roles(skills: list[str]) -> list[dict[str, float | str]]:
+    """Return roles sorted by match percentage."""
+    confidence = get_role_confidence(skills)
+    ranked = sorted(confidence.items(), key=lambda item: item[1], reverse=True)
+    return [{"role": role, "match_percentage": score} for role, score in ranked]

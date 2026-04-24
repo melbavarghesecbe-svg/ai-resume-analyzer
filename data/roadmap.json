@@ -1,0 +1,18 @@
+{
+  "sql": "Practice joins, aggregations, and subqueries on real datasets.",
+  "python": "Build 2 mini automation scripts and one data project using clean functions.",
+  "machine learning": "Train one end-to-end model and explain metrics, assumptions, and trade-offs.",
+  "data visualization": "Create clear charts and dashboards from one business-style dataset.",
+  "power bi": "Build an interactive dashboard with KPI cards, filters, and insights.",
+  "tableau": "Create a dashboard story and narrate trends with actionable findings.",
+  "pandas": "Practice data cleaning, grouping, merging, and feature engineering using CSV datasets.",
+  "numpy": "Practice arrays, broadcasting, vectorized operations, and numerical computations.",
+  "flask": "Build a simple API-backed project and deploy it with clean route structure.",
+  "django": "Build one CRUD web app with authentication and model relationships.",
+  "react": "Build one component-based frontend with reusable state-driven UI blocks.",
+  "javascript": "Practice ES6 fundamentals, array methods, async patterns, and DOM handling.",
+  "communication": "Rewrite project bullets with impact metrics and clear outcome statements.",
+  "project": "Create at least one portfolio project with README, architecture, and results section.",
+  "internship": "Simulate internship-style deliverables with timeline, ownership, and outcomes.",
+  "resume quality": "Use clear section headers, bullet points, and measurable achievements in each section."
+}

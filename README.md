@@ -15,9 +15,11 @@ An end-to-end, rule-based resume analysis app built with Python and Streamlit. I
 - Role prediction with confidence percentages
 - Job-match scoring with weighted skill importance
 - Resume scoring with transparent component breakdown
+- Explainable output with reason list and short human-readable insight
 - Skill-gap roadmap generation
 - Professional PDF report export
 - Side-by-side comparison of two resumes
+- Beginner and Advanced analysis modes in Streamlit UI
 
 ## Tech Stack
 
@@ -57,13 +59,14 @@ ai-career-coaching/
 │   └── skills.json
 └── utils/
     ├── __init__.py
+  ├── cleaner.py
+  ├── insights.py
     ├── matcher.py
     ├── parser.py
     ├── report.py
     ├── role_predictor.py
     ├── scorer.py
-    ├── skill_extractor.py
-    └── text_cleaner.py
+  └── skill_extractor.py
 ```
 
 ## Local Setup
