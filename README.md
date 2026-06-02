@@ -1,25 +1,17 @@
-# AI Career Coaching Resume Analyzer
+# AI Resume Analyzer
 
-An end-to-end, rule-based resume analysis app built with Python and Streamlit. It helps students and early-career professionals evaluate resume quality, predict best-fit roles, compare resumes, and identify skill gaps against a target job description.
+AI Resume Analyzer is a Python and Streamlit app for reviewing resumes, predicting suitable roles, comparing two resumes, and generating practical improvement guidance. It is intentionally rule-based, fast to run locally, and easy to explain in a demo or interview.
 
-## Why This Project
+## What It Does
 
-- Beginner-friendly architecture with clean, modular utilities
-- Fast local execution (no model training required)
-- Practical outputs: role prediction, weighted score, missing skills, roadmap, and downloadable PDF report
-
-## Key Features
-
-- PDF resume text extraction and normalization
-- Config-driven skill extraction (single and multi-word skills)
-- Role prediction with confidence percentages
-- Job-match scoring with weighted skill importance
-- Resume scoring with transparent component breakdown
-- Explainable output with reason list and short human-readable insight
-- Skill-gap roadmap generation
-- Professional PDF report export
-- Side-by-side comparison of two resumes
-- Beginner and Advanced analysis modes in Streamlit UI
+- Extracts text from PDF resumes
+- Detects relevant technical skills from editable JSON mappings
+- Predicts the best-fit role with confidence scores
+- Scores resumes with a weighted breakdown
+- Matches a resume against an optional job description
+- Generates skill-gap roadmaps and PDF reports
+- Compares two resumes side by side
+- Supports light and dark UI themes in Streamlit
 
 ## Tech Stack
 
@@ -30,52 +22,57 @@ An end-to-end, rule-based resume analysis app built with Python and Streamlit. I
 
 ## Screenshots
 
-### Home
+### Dashboard
 
-![Home Screen](assets/images/home.png)
+![Dashboard](assets/images/resume_dashboard.png)
 
-### Upload and Analyze
+### Resume Analyzer
 
-![Upload Flow](assets/images/draganddrop.png)
+![Resume Analyzer](assets/images/resume_analyzer.png)
 
-### Results
+### PDF Report Download
 
-![Analysis Result](assets/images/result.png)
+![PDF Report Download](assets/images/resume_report_downoaded.png)
+
+### Resume Comparison
+
+![Resume Comparison](assets/images/resume_comparison.png)
 
 ## Project Structure
 
 ```text
-ai-career-coaching/
+.
 ├── app.py
-├── assets/
-│   └── images/
-│       ├── draganddrop.png
-│       ├── home.png
-│       └── result.png
 ├── config.py
 ├── requirements.txt
+├── assets/
+│   └── images/
+│       ├── resume_analyzer.png
+│       ├── resume_comparison.png
+│       ├── resume_dashboard.png
+│       └── resume_report_downoaded.png
 ├── data/
+│   ├── roadmap.json
 │   ├── roles.json
 │   └── skills.json
 └── utils/
     ├── __init__.py
-  ├── cleaner.py
-  ├── insights.py
+    ├── cleaner.py
+    ├── insights.py
     ├── matcher.py
     ├── parser.py
     ├── report.py
     ├── role_predictor.py
     ├── scorer.py
-  └── skill_extractor.py
+    └── skill_extractor.py
 ```
 
-## Local Setup
+## Setup
 
 ### 1. Create and activate a virtual environment
 
 ```bash
 python -m venv .venv
-# Windows PowerShell
 .venv\Scripts\Activate.ps1
 ```
 
@@ -91,26 +88,8 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Scoring Formula
+## Notes
 
-```text
-score = (
-  0.4 * skill_score +
-  0.2 * project_score +
-  0.2 * experience_score +
-  0.1 * resume_quality_score +
-  0.1 * keyword_density_score
-)
-```
-
-## Design Notes
-
-- The solution is intentionally rule-based and interpretable.
-- All skill and role mappings are editable in JSON files.
-- Repeated operations are cached in Streamlit for responsiveness.
-
-## Future Improvements
-
-- Add automated tests for core scoring and matching utilities
-- Add optional NLP embeddings for semantic skill matching
-- Add Docker setup for one-command deployment
+- The app uses editable JSON files in `data/` for roles, skills, and roadmap guidance.
+- The scoring and matching logic is transparent, so results are easy to explain and refine.
+- If Windows blocks script execution, run the activation command from an elevated PowerShell session or set the execution policy for the current process.
